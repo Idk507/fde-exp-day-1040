@@ -47,6 +47,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Normalize deployment identifiers
+        env:
+          RAW_RESOURCE_GROUP: ${{ vars.FDE_RESOURCE_GROUP }}
+          RAW_CONTAINERAPP_NAME: ${{ vars.FDE_CONTAINERAPP_NAME }}
+          RAW_PARTICIPANT_ID: ${{ vars.FDE_PARTICIPANT_ID }}
+          RAW_NUMERIC_ID: ${{ vars.FDE_NUMERIC_ID }}
+          RAW_POD_ID: ${{ vars.FDE_POD_ID }}
+          RAW_EVENT_ID: ${{ vars.FDE_EVENT_ID }}
+          RAW_GATEWAY_BASE_URL: ${{ vars.FDE_GATEWAY_BASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          strip_whitespace() { printf '%s' "$1" | tr -d '[:space:]'; }
+
+          resource_group="$(strip_whitespace "$RAW_RESOURCE_GROUP")"
+          containerapp_name="$(strip_whitespace "$RAW_CONTAINERAPP_NAME")"
+          participant_id="$(strip_whitespace "$RAW_PARTICIPANT_ID")"
+          numeric_id="$(strip_whitespace "$RAW_NUMERIC_ID")"
+          pod_id="$(strip_whitespace "$RAW_POD_ID")"
+          event_id="$(strip_whitespace "$RAW_EVENT_ID")"
+          gateway_base_url="$(strip_whitespace "$RAW_GATEWAY_BASE_URL")"
+
+          for value in resource_group containerapp_name participant_id numeric_id pod_id event_id gateway_base_url; do
+            if [ -z "${!value}" ]; then
+              echo "Missing deployment variable after normalization: $value" >&2
+              exit 1
+            fi
+          done
+
+          {
+            echo "RESOURCE_GROUP=$resource_group"
+            echo "CONTAINERAPP_NAME=$containerapp_name"
+            echo "FDE_PARTICIPANT_ID=$participant_id"
+            echo "FDE_NUMERIC_ID=$numeric_id"
+            echo "FDE_POD_ID=$pod_id"
+            echo "FDE_EVENT_ID=$event_id"
+            echo "FDE_GATEWAY_BASE_URL=$gateway_base_url"
+          } >> "$GITHUB_ENV"
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -123,8 +162,8 @@ jobs:
       - name: Configure Container App to pull from GHCR
         run: |
           az containerapp registry set \
-            --name $CONTAINERAPP_NAME \
-            --resource-group $RESOURCE_GROUP \
+            --name "$CONTAINERAPP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
             --server ghcr.io \
             --username ${{ github.actor }} \
             --password ${{ secrets.GITHUB_TOKEN }}
@@ -138,8 +177,8 @@ jobs:
       - name: Ensure ingress target port is 8080
         run: |
           az containerapp ingress update \
-            --name $CONTAINERAPP_NAME \
-            --resource-group $RESOURCE_GROUP \
+            --name "$CONTAINERAPP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
             --target-port 8080
 
       # Langfuse needs no separate OTLP credential pair. Both Langfuse pipes
@@ -162,10 +201,10 @@ jobs:
       - name: Deploy to this participant's Container App
         run: |
           export IMAGE="ghcr.io/${{ steps.owner.outputs.owner }}/banking-app:${{ github.sha }}"
-          export FDE_PARTICIPANT_ID="${{ vars.FDE_PARTICIPANT_ID }}"
-          export FDE_NUMERIC_ID="${{ vars.FDE_NUMERIC_ID }}"
-          export FDE_POD_ID="${{ vars.FDE_POD_ID }}"
-          export FDE_EVENT_ID="${{ vars.FDE_EVENT_ID }}"
+          export FDE_PARTICIPANT_ID="$FDE_PARTICIPANT_ID"
+          export FDE_NUMERIC_ID="$FDE_NUMERIC_ID"
+          export FDE_POD_ID="$FDE_POD_ID"
+          export FDE_EVENT_ID="$FDE_EVENT_ID"
           export FDE_WORKLOAD_TYPE="fde_agent"
           export FDE_AGENT_GATEWAY_ENDPOINT="${{ secrets.FDE_AGENT_GATEWAY_ENDPOINT }}"
           export FDE_AGENT_GATEWAY_KEY="${{ secrets.FDE_AGENT_GATEWAY_KEY }}"
@@ -173,14 +212,14 @@ jobs:
           export FDE_LANGFUSE_OTLP_HEADERS="${{ secrets.FDE_LANGFUSE_OTLP_HEADERS }}"
           envsubst < .azure/container-app.tmpl.yaml > .azure/container-app.resolved.yaml
           az containerapp update \
-            --name $CONTAINERAPP_NAME \
-            --resource-group $RESOURCE_GROUP \
+            --name "$CONTAINERAPP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
             --yaml .azure/container-app.resolved.yaml
 
       - name: Post-deploy verification — resolve live endpoint
         id: post-deploy-url
         run: |
-          APP_URL=$(az containerapp show --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP \
+          APP_URL=$(az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
             --query properties.configuration.ingress.fqdn -o tsv)
           echo "app_url=https://$APP_URL" >> "$GITHUB_OUTPUT"
           echo "Resolved post-deploy endpoint: https://$APP_URL"
@@ -188,7 +227,7 @@ jobs:
       - name: Get the live Runtime URL
         id: url
         run: |
-          URL=$(az containerapp show --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP \
+          URL=$(az containerapp show --name "$CONTAINERAPP_NAME" --resource-group "$RESOURCE_GROUP" \
             --query properties.configuration.ingress.fqdn -o tsv)
           echo "runtime_url=https://$URL" >> "$GITHUB_OUTPUT"
 
@@ -259,7 +298,7 @@ jobs:
       # failure stays precisely attributable to the gateway.
       - name: Confirm reachable through the shared gateway
         if: always()
-        run: curl -sf "${{ vars.FDE_GATEWAY_BASE_URL }}/${{ vars.FDE_PARTICIPANT_ID }}/mcp/health"
+        run: curl -sf "${FDE_GATEWAY_BASE_URL}/${FDE_PARTICIPANT_ID}/mcp/health"
 
       # Stage 4's "final smoke test" is not a separate step — the health
       # check above already runs on every push, including the last one
