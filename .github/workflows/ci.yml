@@ -61,6 +61,8 @@ jobs:
             | tee chat-response.json
           grep -q 'balance \$4523.10' chat-response.json
           curl --silent --fail http://localhost:5000/mcp \
+            -H 'Content-Type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
             | tee mcp-capabilities.json
           grep -q 'get_account_summary' mcp-capabilities.json
 
