@@ -275,6 +275,11 @@ var tools = (await client.ListToolsAsync()).Cast<AITool>().ToList();
             return tools.Invoke("get_balance", Args(101));
         }
 
+        if (message.Contains("summary", StringComparison.OrdinalIgnoreCase))
+        {
+            return tools.Invoke("get_account_summary", Args(101));
+        }
+
         if (message.Contains("history", StringComparison.OrdinalIgnoreCase))
         {
             return tools.Invoke("get_transaction_history", Args(101));

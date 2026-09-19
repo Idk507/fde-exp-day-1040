@@ -33,6 +33,10 @@ public sealed class McpToolCatalog
                 "Gets the most recent transactions for an account by id.",
                 "int", true, accounts, nameof(AccountTools.GetTransactionHistory), "limit", "int", false),
 
+            Define("get_account_summary",
+                "Gets an account balance, total credits, total debits, and transaction count.",
+                "int", true, accounts, nameof(AccountTools.GetAccountSummary)),
+
             Define("normalize_phone",
                 "Normalizes a US phone number to +1XXXXXXXXXX.",
                 "string", true, phone, nameof(PhoneNormalizer.NormalizePhone)),
