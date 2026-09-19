@@ -19,6 +19,7 @@ question.
 ## Available tools
 
 - `get_balance(accountId)` — current balance of an account.
+- `get_account_summary(accountId)` — balance, total credits, total debits, and transaction count.
 - `list_accounts()` — every account on file with balances.
 - `get_transaction_history(accountId, limit)` — recent transactions.
 - `normalize_phone(phone)` — normalize a US phone number.

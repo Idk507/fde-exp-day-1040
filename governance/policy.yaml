@@ -27,7 +27,7 @@ rules:
   - id: block-customer-enumeration
     description: "Bulk listing of every account on file is denied outside an authenticated banker session — S1/S3/S6 in the fixed adversarial suite probe exactly this."
     effect: deny
-    when:
+    when: 
       tool: [list_accounts]
       condition: "session.role != 'banker'"
 

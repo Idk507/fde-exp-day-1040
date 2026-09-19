@@ -44,6 +44,28 @@ jobs:
         if: hashFiles('src/BankingApp/BankingApp.csproj') != ''
         run: dotnet build --no-restore --configuration Release src/BankingApp/BankingApp.csproj
 
+      - name: Smoke test account summary feature
+        if: hashFiles('src/BankingApp/BankingApp.csproj') != ''
+        shell: bash
+        run: |
+          dotnet run --no-build --configuration Release --project src/BankingApp > banking-app.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --silent --fail http://localhost:5000/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail http://localhost:5000/chat \
+            -H 'Content-Type: application/json' \
+            --data '{"message":"show my account summary"}' \
+            | tee chat-response.json
+          grep -q 'balance \$4523.10' chat-response.json
+          curl --silent --fail http://localhost:5000/mcp \
+            -H 'Content-Type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            | tee mcp-capabilities.json
+          grep -q 'get_account_summary' mcp-capabilities.json
+
       # Phone normalization is participant code inside BankingApp.Tools.
       # Its harness lives in src/PhoneNormalization.Tests and links
       # ../BankingApp/Tools/PhoneNormalizer.cs in at compile time, so this

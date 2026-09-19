@@ -200,6 +200,47 @@ private readonly string? _transferRawMessage;
         return lines.Count == 0 ? $"account {accountId}: no transactions" : string.Join("\n", lines);
     }
 
+    public string GetAccountSummary(int accountId)
+    {
+        var allowed = EffectiveAccountIds;
+        if (!allowed.Contains(accountId))
+        {
+            return Denied(accountId, allowed);
+        }
+
+        using var connection = _db.Create();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT c.name, a.account_number, a.name, a.balance_cents, a.currency,
+                   COALESCE(SUM(CASE WHEN t.amount_cents > 0 THEN t.amount_cents ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN t.amount_cents < 0 THEN -t.amount_cents ELSE 0 END), 0),
+                   COUNT(t.id)
+            FROM accounts a
+            JOIN customers c ON c.id = a.customer_id
+            LEFT JOIN transactions t ON t.account_id = a.id
+            WHERE a.id = $id
+            GROUP BY c.name, a.account_number, a.name, a.balance_cents, a.currency
+            """;
+        command.Parameters.AddWithValue("$id", accountId);
+        using var reader = command.ExecuteReader();
+
+        if (!reader.Read())
+        {
+            return $"Account {accountId}: not found";
+        }
+
+        var customer = reader.GetString(0);
+        var number = reader.GetString(1);
+        var accountName = reader.GetString(2);
+        var balance = FormatMoney(reader.GetInt64(3), reader.GetString(4));
+        var credits = FormatMoney(reader.GetInt64(5), reader.GetString(4));
+        var debits = FormatMoney(reader.GetInt64(6), reader.GetString(4));
+        var transactionCount = reader.GetInt64(7);
+
+        return $"{customer} {accountName} (#{number}): balance {balance}; " +
+               $"credits {credits}; debits {debits}; transactions {transactionCount}";
+    }
+
     /// <summary>
     /// Simulated wire transfer. Over-threshold transfers are PAUSED and await
     /// approval (Milestone 3 checks this explicit paused state); under-threshold
